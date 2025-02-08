@@ -170,5 +170,5 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Dont push the raw data to github
+# Raw data to github
 data/
