@@ -1,6 +1,8 @@
+
 import streamlit as st
 import json
 import os
+import pandas as pd
 from dotenv import load_dotenv
 from typing import Dict, Any
 from openai import OpenAI
@@ -18,22 +20,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .stAlert {
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    .source-box {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # Initialize session state
 if 'qa_chain' not in st.session_state:
     st.session_state.qa_chain = None
@@ -50,7 +36,8 @@ def initialize_qa_system():
             return False
 
         # Load data
-        with open('./data/convfinqatrain.json', 'r') as f:
+        data_path = os.path.join('data', 'convfinqatrain.json')
+        with open(data_path, 'r') as f:
             json_data = json.load(f)
         data = json_data[:10]  # Adjust as needed
 
@@ -58,7 +45,7 @@ def initialize_qa_system():
         embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
 
         # Load existing ChromaDB
-        persist_directory = "chroma_db"
+        persist_directory = "vectorstore"
         if os.path.exists(persist_directory):
             vectorstore = Chroma(
                 persist_directory=persist_directory,
@@ -126,9 +113,9 @@ with st.sidebar:
         Simply type your question about financial metrics, trends, or specific data points.
         
         Example questions:
-        - What was the net change in sales from 2008 to 2009?
-        - How did the profit margins evolve over time?
-        - What were the total assets in the most recent year?
+        - What was the net change in sales from 2007 to 2008?
+        - what were revenues in 2008??
+        - what was the change in the performance of the united parcel service inc . from 2004 to 2009?
     """)
     
     # Initialize button
@@ -146,7 +133,7 @@ else:
     # Query input
     question = st.text_input(
         "Enter your financial question:",
-        placeholder="e.g., What was the net change in sales from 2008 to 2009?"
+        placeholder="e.g., What was the net change in sales from 2007 to 2008?"
     )
 
     # Process query
