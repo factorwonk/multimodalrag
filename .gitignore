@@ -172,5 +172,4 @@ cython_debug/
 .pypirc
 
 # Raw data to github
-data/
 scratch/
