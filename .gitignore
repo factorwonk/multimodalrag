@@ -173,3 +173,4 @@ cython_debug/
 
 # Raw data to github
 data/
+scratch/
