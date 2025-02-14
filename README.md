@@ -1,2 +1,2 @@
-# tomoroconvfinqa
-My Solution to the Tomoro Technical Assignment
+# Multi-Modal RAG Pipeline
+My implementation of Multimodal RAG pipeline
