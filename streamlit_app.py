@@ -55,8 +55,8 @@ def render_sidebar():
             
             ### Sample Questions:
             - What was the percentage change in the net cash from operating activities from 2008 to 2009?
-            - What was the percentage change in net sales from 2000 to 2001?
-            - What portion of the authorized shares of class b common stock is outstanding as of december 31, 2017?
+            - What was the percent of the growth in the revenues from 2007 to 2008?
+            - What was the percent of the growth in the revenues from 2007 to 2008?
             
             ### Tips:
             - Be specific with dates and metrics
