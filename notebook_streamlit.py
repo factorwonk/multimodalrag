@@ -12,21 +12,6 @@ from openai import OpenAI
 from operator import itemgetter
 from IPython.display import Markdown
 
-# from langchain.chat_models import ChatOpenAI
-# from langchain.embeddings.openai import OpenAIEmbeddings
-# from langchain_chroma import Chroma
-# from langchain.schema import Document
-# from langchain.prompts import PromptTemplate
-# from langchain.text_splitter import RecursiveCharacterTextSplitter
-# from langchain.retrievers.multi_vector import MultiVectorRetriever
-# from langchain.storage import InMemoryStore
-# from langchain_core.output_parsers import StrOutputParser
-# from langchain_core.prompts import ChatPromptTemplate
-# from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-# from langchain_core.messages import HumanMessage
-
-
-
 def create_streamlit_app():
     """Create the Streamlit app files and supporting modules"""
     
