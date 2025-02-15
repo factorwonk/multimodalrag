@@ -2,169 +2,156 @@
 import streamlit as st
 import json
 import os
-import pandas as pd
-from dotenv import load_dotenv
-from typing import Dict, Any
-from openai import OpenAI
-from langchain.chat_models import ChatOpenAI
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.schema import Document
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
+from typing import List, Dict, Any
+from rag_system import initialize_rag, rag_qa
 
-# Page configuration
-st.set_page_config(
-    page_title="Financial Data QA System",
-    page_icon="💰",
-    layout="wide"
-)
-
-# Initialize session state
-if 'qa_chain' not in st.session_state:
-    st.session_state.qa_chain = None
-
-def initialize_qa_system():
-    """Initialize the QA system with all necessary components"""
-    try:
-        # Load environment variables
-        load_dotenv(override=True)
-        api_key = os.getenv('OPENAI_API_KEY')
-        
-        if not api_key:
-            st.error("OpenAI API key not found. Please check your .env file.")
-            return False
-
-        # Load data
-        data_path = os.path.join('data', 'convfinqatrain.json')
-        with open(data_path, 'r') as f:
-            json_data = json.load(f)
-        data = json_data[:10]  # Adjust as needed
-
-        # Initialize embedding model
-        embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
-
-        # Load existing ChromaDB
-        persist_directory = "vectorstore"
-        if os.path.exists(persist_directory):
-            vectorstore = Chroma(
-                persist_directory=persist_directory,
-                embedding_function=embedding_model
-            )
-        else:
-            st.error("Vector store not found. Please run the initialization script first.")
-            return False
-
-        # Create custom prompt template
-        CUSTOM_PROMPT_TEMPLATE = """
-        You are a financial analyst assistant. Use the following pieces of context to answer the question about financial data. 
-        If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-        Context: {context}
-
-        Question: {question}
-
-        Provide a detailed answer with numerical calculations when applicable:
-        """
-
-        PROMPT = PromptTemplate(
-            template=CUSTOM_PROMPT_TEMPLATE,
-            input_variables=["context", "question"]
-        )
-
-        # Initialize QA chain
-        llm = ChatOpenAI(model_name="gpt-4", temperature=0)
-        st.session_state.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-            chain_type_kwargs={"prompt": PROMPT},
-            return_source_documents=True
-        )
-
-        return True
-
-    except Exception as e:
-        st.error(f"Error initializing QA system: {str(e)}")
-        return False
-
-def query_financial_data(question: str) -> Dict:
-    """Query the financial data using the QA chain"""
-    try:
-        result = st.session_state.qa_chain({"query": question})
-        return {
-            "answer": result["result"],
-            "source_documents": [doc.page_content for doc in result["source_documents"]]
-        }
-    except Exception as e:
-        return {
-            "answer": f"Error processing query: {str(e)}",
-            "source_documents": []
-        }
-
-# Main app layout
-st.title("📊 Financial Data QA System")
-
-# Sidebar
-with st.sidebar:
-    st.header("About")
-    st.markdown("""
-        This application allows you to query financial data using natural language.
-        Simply type your question about financial metrics, trends, or specific data points.
-        
-        Example questions:
-        - What was the net change in sales from 2007 to 2008?
-        - what were revenues in 2008??
-        - what was the change in the performance of the united parcel service inc . from 2004 to 2009?
-    """)
+def format_sources(sources: Dict[str, List[str]]) -> str:
+    """Format source documents for display in a readable format."""
+    formatted_text = ""
     
-    # Initialize button
-    if st.button("Initialize/Reset System"):
-        with st.spinner("Initializing QA system..."):
-            if initialize_qa_system():
-                st.success("System initialized successfully!")
-            else:
-                st.error("Failed to initialize system.")
+    if sources['texts']:
+        formatted_text += "### Text Sources:\n"
+        for source in sources['texts']:
+            formatted_text += f"- {source}\n\n"
+    
+    if sources['tables']:
+        formatted_text += "### Table Sources:\n"
+        for table in sources['tables']:
+            formatted_text += f"```\n{table}\n```\n\n"
+            
+    return formatted_text
 
-# Main content
-if st.session_state.qa_chain is None:
-    st.info("Please initialize the system using the button in the sidebar.")
-else:
-    # Query input
-    question = st.text_input(
-        "Enter your financial question:",
-        placeholder="e.g., What was the net change in sales from 2007 to 2008?"
+def initialize_session_state():
+    """Initialize the session state variables needed for the application."""
+    if 'rag_chain' not in st.session_state:
+        with st.spinner('Loading RAG model...'):
+            try:
+                st.session_state.rag_chain, st.session_state.retriever = initialize_rag()
+                st.success("RAG model loaded successfully!")
+            except Exception as e:
+                st.error(f"Failed to initialize RAG model: {str(e)}")
+                return False
+    
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+        
+    if 'question' not in st.session_state:
+        st.session_state.question = ''
+    
+    return True
+
+def render_sidebar():
+    """Render the application sidebar with helpful information."""
+    with st.sidebar:
+        st.header("About")
+        st.markdown("""
+            This application allows you to query financial data using natural language.
+            The system combines text and table information to provide accurate answers.
+            
+            ### Features:
+            - Natural language queries
+            - Combined text and table analysis
+            - Source document tracking
+            
+            ### Sample Questions:
+            - What was the percentage change in the net cash from operating activities from 2008 to 2009?
+            - What was the percentage change in net sales from 2000 to 2001?
+            - What portion of the authorized shares of class b common stock is outstanding as of december 31, 2017?
+            
+            ### Tips:
+            - Be specific with dates and metrics
+            - Use complete sentences
+            - Check source documents for context
+        """)
+
+
+def handle_form_submission():
+    """Handle the form submission and question processing."""
+    # Get the current question from session state
+    query = st.session_state.question
+    
+    if not query:
+        return
+        
+    with st.spinner('Processing question...'):
+        try:
+            # Send query to RAG system and get response
+            response = rag_qa(st.session_state.rag_chain, query)
+            
+            # Add Q&A pair to history
+            st.session_state.history.append({
+                "question": query,
+                "answer": response['answer'],
+                "sources": response['context']
+            })
+            
+            # Reset the question in session state by using a new key
+            st.session_state.question = ""
+            
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+
+
+def render_input_section():
+    """Render the query input section with a text field and submit button."""
+    # Create a form to group input elements
+    with st.form(key="query_form"):
+        # Create a two-column layout
+        col1, col2 = st.columns([4, 1])
+        
+        # Text input in the first (wider) column
+        with col1:
+            st.text_input(
+                "Enter your question about the financial data:",
+                key="question",
+                placeholder="e.g., What was the net change in sales from 2007 to 2008?"
+            )
+        
+        # Submit button in the second (narrower) column
+        with col2:
+            submit_button = st.form_submit_button(
+                "Submit", 
+                use_container_width=True,
+                on_click=handle_form_submission
+            )
+
+
+def render_history():
+    """Render the conversation history with questions, answers, and sources."""
+    if st.session_state.history:
+        st.write("---")
+        st.write("### Question History")
+        
+        for i, item in enumerate(reversed(st.session_state.history)):
+            with st.expander(f"Q: {item['question']}", expanded=(i == 0)):
+                st.write("#### Answer:")
+                st.markdown(item['answer'])
+                
+                st.write("#### Sources:")
+                st.markdown(format_sources(item['sources']))
+
+
+def main():
+    st.set_page_config(
+        page_title="Financial Data QA System",
+        page_icon="💰",
+        layout="wide"
+    )
+    
+    st.title("📊 Financial Document QA System")
+    
+    if not initialize_session_state():
+        st.stop()
+    
+    # Render all comments
+    render_sidebar()
+    render_input_section()
+    render_history()
+    
+    st.markdown("---")
+    st.markdown(
+        "💡 Tip: For best results, be specific in your questions and include relevant time periods."
     )
 
-    # Process query
-    if question:
-        with st.spinner("Processing your question..."):
-            result = query_financial_data(question)
-            
-            # Display answer
-            st.markdown("### Answer")
-            st.write(result["answer"])
-            
-            # Display source documents
-            with st.expander("View Source Documents"):
-                for idx, doc in enumerate(result["source_documents"], 1):
-                    st.markdown(f"**Source Document {idx}**")
-                    st.markdown(f'<div class="source-box">{doc}</div>', unsafe_allow_html=True)
-
-    # Additional features
-    with st.expander("Advanced Options"):
-        st.markdown("### Query History")
-        if 'query_history' not in st.session_state:
-            st.session_state.query_history = []
-        
-        if question and question not in st.session_state.query_history:
-            st.session_state.query_history.append(question)
-        
-        for historic_query in st.session_state.query_history:
-            st.write(f"- {historic_query}")
-
-# Footer
-st.markdown("---")
-st.markdown(
-    "💡 Tip: For best results, be specific in your questions and include relevant time periods or metrics."
-)
+if __name__ == "__main__":
+    main()
